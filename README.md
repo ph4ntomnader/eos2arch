@@ -2,20 +2,20 @@
 (Bash script by Adam Wyatt – Ay1tsMe, 2025)
 
 ## What this script does
-eos2arch converts an existing EndeavourOS installation into a stock Arch Linux system in place.
+`eos2arch` converts an existing EndeavourOS installation into a stock Arch Linux system in place.
 
 It removes all EndeavourOS-specific packages and branding, switches you to the official Arch repositories and keyrings, rebuilds the bootloader and initramfs, and finally renames the filesystem label so your machine now identifies as Arch Linux everywhere.
 
 ## Before you begin
-- Back up absolutely EVERYTHING. The script asks twice—but you are responsible for your data.
-- You must run it as root (sudo ./eos2arch.sh).
+- Back up absolutely EVERYTHING. The script asks twice-but you are responsible for your data.
+- You must run it as root (`sudo ./eos2arch.sh`).
 - The migration is one-way. Rolling back requires restoring from your backup.
 - I recommend [Timeshift](https://github.com/linuxmint/timeshift) for your backups.
 
 # Prerequisites
 - An internet connection.
 - EFI system with GRUB bootloader.
-- No custom kernals. (I tried this with zen and it broke dracut. Probably a workaround to this.)
+- No custom kernals or multiple kernals. (I tried this with zen kernal and it broke `dracut`. Probably a workaround to this.)
 
 ## Usage
 ```
