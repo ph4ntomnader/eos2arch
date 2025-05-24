@@ -12,7 +12,7 @@ It removes all EndeavourOS-specific packages and branding, switches you to the o
 - The migration is one-way. Rolling back requires restoring from your backup.
 - I recommend [Timeshift](https://github.com/linuxmint/timeshift) for your backups.
 
-# Prerequisites
+## Prerequisites
 - An internet connection.
 - EFI system with GRUB bootloader.
 - No custom kernals or multiple kernals. (I tried this with zen kernal and it broke `dracut`. Probably a workaround to this.)
