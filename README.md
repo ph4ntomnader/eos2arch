@@ -26,7 +26,7 @@ chmod +x eos2arch.sh
 sudo ./eos2arch.sh
 ```
 
-## Step-by-Step Procedure?
+## Step-by-Step Procedure
 1. Updates the system
 2. Uninstalls all EndeavourOS packages
 3. Removes EndeavourOS repo from `/etc/pacman.conf`
