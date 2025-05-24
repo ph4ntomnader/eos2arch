@@ -47,11 +47,25 @@ sleep 1
 
 echo
 echo "Removing EndeavourOS packages..."
-pacman -R \
-  reflector-simple eos-log-tool \
-  endeavouros-branding endeavouros-keyring endeavouros-mirrorlist \
-  eos-apps-info eos-bash-shared eos-dracut eos-hooks eos-packagelist \
+packages=(
+  reflector-simple eos-log-tool
+  endeavouros-branding endeavouros-keyring endeavouros-mirrorlist
+  eos-apps-info eos-bash-shared eos-dracut eos-hooks eos-packagelist
   eos-rankmirrors eos-translations eos-update-notifier welcome
+)
+
+# Filter out packages that are not installed
+installed_packages=()
+for pkg in "${packages[@]}"; do
+  pacman -Qi "$pkg" &>/dev/null && installed_packages+=("$pkg")
+done
+
+if [ ${#installed_packages[@]} -gt 0 ]; then
+  pacman -R "${installed_packages[@]}"
+else
+  echo "No EndeavourOS packages found to remove."
+fi
+sleep 1
 
 # Change pacman keyrings to Arch only
 echo
