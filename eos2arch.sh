@@ -51,7 +51,7 @@ packages=(
   reflector-simple eos-log-tool
   endeavouros-branding endeavouros-keyring endeavouros-mirrorlist
   eos-apps-info eos-bash-shared eos-dracut eos-hooks eos-packagelist
-  eos-rankmirrors eos-translations eos-update-notifier welcome
+  eos-rankmirrors eos-translations eos-update-notifier welcome eos-settings-gnome
 )
 
 # Filter out packages that are not installed
