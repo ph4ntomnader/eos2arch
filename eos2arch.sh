@@ -4,8 +4,60 @@
 # eos2arch - migrate an installed EndeavourOS system to pure Arch Linux
 #
 # WARNING: Backup your system before running!!! Things could go wrong.
+#
+# Run with the --dry-run flag before proceeding.
 
 set -euo pipefail
+
+# cli options
+DRYRUN=0
+for arg in "$@"; do
+  case "$arg" in
+    -n|--dry-run) DRYRUN=1 ;;
+    -h|--help)
+      echo "Usage: $0 [--dry-run|-n]"
+      exit 0 ;;
+    *) echo "[ERROR] Unknown option: $arg" >&2; exit 1 ;;
+  esac
+done
+
+# --dry-run helper
+run() {
+  printf '[command] %s\n' "$(printf '%q ' "$@")"
+  if [[ $DRYRUN -eq 0 ]]; then
+    "$@"
+  fi
+}
+
+# Always-execute helper for harmless queries (e.g. reflector --list-countries)
+run_safe() {
+  printf '[command] %s\n' "$(printf '%q ' "$@")"
+  "$@"
+}
+
+# Convenience “maybe-prompt” wrapper
+prompt() {
+  local __q="$1" __var="$2"
+  if [[ $DRYRUN -eq 1 ]]; then
+    printf '[dry-run] %s (auto-answering Yes)\n' "$__q"
+    printf -v "$__var" "y"
+  else
+    read -rp "$__q" "$__var"
+  fi
+}
+
+# pre-flight sanity helpers
+require_cmd()  { command -v "$1" &>/dev/null || { echo "[ERROR] command '$1' missing"; exit 1; }; }
+require_file() { [[ -e "$1" ]]   || { echo "[ERROR] required file '$1' missing";  exit 1; }; }
+
+# Check that the *tools* we intend to call actually exist
+for c in pacman reflector dracut grub-install efibootmgr sed awk lsblk e2label; do
+  require_cmd "$c"
+done
+# Check that key files we will touch are present
+for f in /etc/pacman.conf /etc/issue /etc/default/grub; do
+  require_file "$f"
+done
 
 # Require root
 if [[ $EUID -ne 0 ]]; then
@@ -17,17 +69,32 @@ echo "Welcome to eos2arch! This script migrates an installed EndeavourOS system 
 echo
 
 # Ask whether a backup exists
-read -rp "Have you made a full backup of your system? [Y/n] " reply
-case "${reply,,}" in          
-  y|yes)  ;;
-  *)      echo "Aborted. Please back up first."; exit 1;;
+if [[ $DRYRUN -eq 0 ]]; then
+  prompt "It is recommended you run this with --dry-run to see if the script will work for you. Have you done this? [Y/n] " reply
+  case "${reply,,}" in
+    y|yes|'')  ;;
+    *)         echo "Aborted. Please run with ./eos2arch.sh --dry-run first."; exit 1;;
+  esac
+fi
+
+prompt "Have you made a full backup of your system? [Y/n] " reply
+case "${reply,,}" in
+  y|yes|'')  ;;
+  *)         echo "Aborted. Please back up first."; exit 1;;
 esac
 
-read -rp "Are you sure you've made a backup? If something goes wrong, you will need a backup to restore your system back to normal. [Y/n] " reply
-case "${reply,,}" in          
-  y|yes)  ;;
-  *)      echo "Aborted. Please back up first."; exit 1;;
+prompt "Are you sure you've made a backup? If something goes wrong, you will need a backup to restore your system back to normal. [Y/n] " reply
+case "${reply,,}" in
+  y|yes|'')  ;;
+  *)         echo "Aborted. Please back up first."; exit 1;;
 esac
+
+# Dry-run notice block
+if [[ $DRYRUN -eq 1 ]]; then
+  echo
+  echo "Running with --dry-run; if you see any output with [skip] then the script will probably not work."
+  sleep 5
+fi
 
 echo
 echo "Running eos2arch"
@@ -36,12 +103,12 @@ sleep 1
 # Update system
 echo
 echo "Updating system..."
-pacman -Syu
+run pacman -Syu
 sleep 1
 
 echo
 echo "Updating keyrings..."
-pacman -S --needed endeavouros-keyring archlinux-keyring
+run pacman -S --needed endeavouros-keyring archlinux-keyring
 echo "Successfully updated system."
 sleep 1
 
@@ -61,7 +128,7 @@ for pkg in "${packages[@]}"; do
 done
 
 if [ ${#installed_packages[@]} -gt 0 ]; then
-  pacman -R "${installed_packages[@]}"
+  run pacman -R "${installed_packages[@]}"
 else
   echo "No EndeavourOS packages found to remove."
 fi
@@ -70,101 +137,132 @@ sleep 1
 # Change pacman keyrings to Arch only
 echo
 echo "Editing pacman keyrings to Arch only..."
-sed -i '/^\[endeavouros\]/{N;N;N;d}' /etc/pacman.conf
+if [[ -e /etc/pacman.conf ]]; then
+  if grep -q '^\[endeavouros\]' /etc/pacman.conf; then
+    run sed -i '/^\[endeavouros\]/{N;N;N;d}' /etc/pacman.conf
+  else
+    echo "[skip] No EndeavourOS repo block in /etc/pacman.conf"
+  fi
+else
+  echo "[skip] /etc/pacman.conf not found"
+fi
 sleep 0.5
 
 echo
 echo "Downloading reflector..."
-pacman -S reflector pacman-contrib
+run pacman -S reflector pacman-contrib
 sleep 1
 
 echo
 echo "Running reflector..."
-reflector --list-countries
+run_safe reflector --list-countries
 read -rp "Type in your country code e.g. AU, DE, US " country_code
 country_code=${country_code^^} # Uppercase
 if reflector --list-countries | grep -wq "$country_code"; then
 	echo "Country Code Valid. Proceeding..."
-	reflector --country "$country_code" --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
+	run reflector --country "$country_code" --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
 else
 	echo "Aborted. Invalid Country Code."
 	exit 1
 fi
 sleep 1
 
-
 echo
 echo "Syncing Arch Linux keyrings..."
-pacman -Sy --needed archlinux-keyring
+run pacman -Sy --needed archlinux-keyring
 sleep 1
 
 # Update os-release files
 echo
-echo "Updating os-release to Arch Linux..." 
+echo "Updating os-release to Arch Linux..."
 echo
 echo "Deleting old os-release files..."
-rm /usr/lib/os-release
-rm /etc/os-release
+[[ -e /usr/lib/os-release ]] && run rm /usr/lib/os-release || echo "[skip] /usr/lib/os-release not found"
+[[ -e /etc/os-release ]] && run rm /etc/os-release || echo "[skip] /etc/os-release not found"
 sleep 0.5
 
 echo
 echo "Reinstalling Arch os-release files..."
-pacman -S --overwrite /usr/lib/os-release filesystem
+run pacman -S --overwrite /usr/lib/os-release filesystem
 sleep 1
 
 # Update tty /etc/issue
 echo
 echo "Removing eos branding from tty..."
-sed -i 's/EndeavourOS/Arch/g' /etc/issue
+if [[ -e /etc/issue ]]; then
+  if grep -qi 'EndeavourOS' /etc/issue; then
+    run sed -i 's/EndeavourOS/Arch/g' /etc/issue
+  else
+    echo "[skip] /etc/issue already shows Arch"
+  fi
+else
+  echo "[skip] /etc/issue not found"
+fi
 sleep 1
 
 # Update grub
 echo
 echo "Removing eos branding from grub..."
-rm /etc/lsb-release
+[[ -e /etc/lsb-release ]] && run rm /etc/lsb-release || echo "[skip] /etc/lsb-release not found"
 sleep 0.5
-pacman -S lsb-release
+run pacman -S lsb-release
 
 echo
 echo "Editing GRUB_DISTRIBUTOR to Arch..."
-sed -i 's/EndeavourOS/Arch/g' /etc/default/grub
+if [[ -e /etc/default/grub ]]; then
+  if grep -qi 'EndeavourOS' /etc/default/grub; then
+    run sed -i 's/EndeavourOS/Arch/g' /etc/default/grub
+  else
+    echo "[skip] GRUB_DISTRIBUTOR already set to Arch"
+  fi
+else
+  echo "[skip] /etc/default/grub not found"
+fi
 sleep 0.5
 
 echo
 echo "Creating new grub entry"
-sudo grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="Arch Linux" --recheck
+run grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id="Arch Linux" --recheck
 sleep 1
 
 echo
 echo "Removing old EndeavourOS grub entry and replacing with Arch Linux entry..."
 eos_id=$(efibootmgr | awk '/endeavouros/{print substr($1,5,4)}' | head -1)
-sudo efibootmgr -b $eos_id -B 
+if [[ -n "$eos_id" ]]; then
+  run efibootmgr -b "$eos_id" -B
+else
+  echo "[skip] No EndeavourOS EFI entry found"
+fi
 sleep 0.5
 
 echo
 echo "Removing EOS branding folder..."
-rm -rf /boot/efi/EFI/ENDEAVOUROS
-rm -rf /usr/share/endeavouros
+[[ -d /boot/efi/EFI/ENDEAVOUROS ]] && run rm -rf /boot/efi/EFI/ENDEAVOUROS || echo "[skip] /boot/efi/EFI/ENDEAVOUROS not found"
+[[ -d /usr/share/endeavouros ]] && run rm -rf /usr/share/endeavouros || echo "[skip] /usr/share/endeavouros not found"
 sleep 1
 
 # Rebuilding dracut
 echo
 echo "Rebuilding dracut..."
-dracut --hostonly --no-hostonly-cmdline --add-confdir no-network /boot/initramfs-linux.img --force
+run dracut --hostonly --no-hostonly-cmdline --add-confdir no-network /boot/initramfs-linux.img --force
 sleep 1
-dracut /boot/initramfs-linux-fallback.img --force
+run dracut /boot/initramfs-linux-fallback.img --force
 
 echo
 echo "Initalise grub"
-grub-mkconfig -o /boot/grub/grub.cfg
+run grub-mkconfig -o /boot/grub/grub.cfg
 sleep 1
 
 echo
 echo "Renaming partition label..."
-drive=$(lsblk -f | grep -w endeavouros | awk '{gsub(/[^a-zA-Z0-9]/,"",$1); print $1}')
-e2label /dev/"$drive" "arch"
-echo
-echo "Renamed /dev/"$drive" to arch"
+drive=$(lsblk -f | grep -w endeavouros | awk '{gsub(/[^a-zA-Z0-9]/,"",$1); print $1}') || true
+if [[ -n "$drive" ]]; then
+  run e2label /dev/"$drive" "arch"
+  echo
+  echo "Renamed /dev/$drive to arch"
+else
+  echo "[skip] Could not find partition with label endeavouros"
+fi
 
 echo
 echo "[SUCCESS] You can now reboot your system!"

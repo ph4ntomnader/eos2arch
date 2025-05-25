@@ -11,6 +11,7 @@ It removes all EndeavourOS-specific packages and branding, switches you to the o
 - You must run it as root (`sudo ./eos2arch.sh`).
 - The migration is one-way. Rolling back requires restoring from your backup.
 - I recommend [Timeshift](https://github.com/linuxmint/timeshift) for your backups.
+- Do a dry-run first before running the actual script.
 
 ## Prerequisites
 - An internet connection.
@@ -21,6 +22,12 @@ It removes all EndeavourOS-specific packages and branding, switches you to the o
 ```
 # Make it executable
 chmod +x eos2arch.sh
+
+# Help command
+./eos2arch.h -h
+
+# Do a dry-run first
+sudo ./eos2arch.sh --dry-run
 
 # Run as root
 sudo ./eos2arch.sh
