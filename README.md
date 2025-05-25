@@ -24,7 +24,7 @@ It removes all EndeavourOS-specific packages and branding, switches you to the o
 chmod +x eos2arch.sh
 
 # Help command
-./eos2arch.h -h
+./eos2arch.sh -h
 
 # Do a dry-run first
 sudo ./eos2arch.sh --dry-run
