@@ -17,6 +17,7 @@ It removes all EndeavourOS-specific packages and branding, switches you to the o
 - An internet connection.
 - EFI system with GRUB bootloader.
 - No custom kernals or multiple kernals. (I tried this with zen kernal and it broke `dracut`. Probably a workaround to this.)
+- Script uses `dracut` instead of `mkinitcpio`. If you use `mkinitcpio`, do not run.
 
 ## Usage
 ```

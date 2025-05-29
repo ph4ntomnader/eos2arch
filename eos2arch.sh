@@ -50,6 +50,43 @@ prompt() {
 require_cmd()  { command -v "$1" &>/dev/null || { echo "[ERROR] command '$1' missing"; exit 1; }; }
 require_file() { [[ -e "$1" ]]   || { echo "[ERROR] required file '$1' missing";  exit 1; }; }
 
+# copy dracut helper scripts + hooks if they are absent
+dracut_autosetup() {
+  local REPO_DIR SCRIPT_DIR
+  REPO_DIR=$(dirname "$(realpath "$0")")
+  DRACUT_DIR="$REPO_DIR/dracut"
+
+  # helper scripts → /usr/local/bin
+  for f in dracut-install.sh dracut-remove.sh; do
+    if [[ ! -e /usr/local/bin/$f ]]; then
+      run install -Dm755 "$DRACUT_DIR/$f" "/usr/local/bin/$f"
+    else
+      echo "[skip] /usr/local/bin/$f already exists"
+    fi
+  done
+
+  # pacman hooks → /etc/pacman.d/hooks
+  for h in 60-dracut-remove.hook 90-dracut-install.hook; do
+    if [[ ! -e /etc/pacman.d/hooks/$h ]]; then
+      run install -Dm644 "$DRACUT_DIR/$h" "/etc/pacman.d/hooks/$h"
+    else
+      echo "[skip] /etc/pacman.d/hooks/$h already exists"
+    fi
+  done
+
+  # delete mkinitcpio hooks if they exist
+  run ln -sf /dev/null /etc/pacman.d/hooks/90-mkinitcpio-install.hook
+  run ln -sf /dev/null /etc/pacman.d/hooks/60-mkinitcpio-remove.hook
+
+  # remove mkinitcpio packages once dracut images exist
+  if mkinitcpio -V &>/dev/null; then
+    echo "[info] Removing mkinitcpio and its helpers..."
+    run pacman -R mkinitcpio || true
+  fi
+
+  echo "[OK] dracut automatic regeneration is installed"
+}
+
 # Check that the *tools* we intend to call actually exist
 for c in pacman reflector dracut grub-install efibootmgr sed awk lsblk e2label; do
   require_cmd "$c"
@@ -247,6 +284,12 @@ echo "Rebuilding dracut..."
 run dracut --hostonly --no-hostonly-cmdline --add-confdir no-network /boot/initramfs-linux.img --force
 sleep 1
 run dracut /boot/initramfs-linux-fallback.img --force
+
+# Copying dracut scripts + hooks
+echo
+echo "Setting up dracut automatic kernal hooks..."
+dracut_autosetup
+sleep 1
 
 echo
 echo "Initalise grub"
